@@ -1,5 +1,5 @@
-import requests
 import random
+import asyncio
 import time
 from typing import List, Optional, Tuple
 import os
@@ -11,7 +11,7 @@ from rich.live import Live
 from rich.layout import Layout
 from superhero import Superhero
 from team import Team
-from api import fetch_all_superheroes, fetch_random_superheroes
+from api import fetch_all_superheroes, fetch_random_superheroes, async_fetch_random_superheroes
 
 from dotenv import load_dotenv
 load_dotenv()  # This loads the variables from .env
@@ -30,7 +30,6 @@ console = Console() # Console for TUI
 
 
 
-    
 def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]:
     """Populates superheroes from the given data."""
     # Convert the dictionary values to a list
@@ -42,14 +41,14 @@ def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]
         superheroes.append(Superhero(
             MAX_FB,
             hero['name'],
-            hero['powerstats']['intelligence'],
-            hero['powerstats']['strength'],
-            hero['powerstats']['speed'],
-            hero['powerstats']['durability'],
-            hero['powerstats']['power'],
-            hero['powerstats']['combat'],
+            int(hero['powerstats']['intelligence']),
+            int(hero['powerstats']['strength']),
+            int(hero['powerstats']['speed']),
+            int(hero['powerstats']['durability']),
+            int(hero['powerstats']['power']),
+            int(hero['powerstats']['combat']),
             hero['biography']['alignment'],
-            hero['images']['xs']
+            hero['image']['url']
         ))
     # 'image''url' in superheroapi.com, but 'images''xs' in akabab.github.io/superhero-api
     return superheroes
@@ -126,9 +125,10 @@ def simulate_fight(team1: Team, team2: Team) -> None:
     console.print(f"[bold green]Winner: {winner}[/bold green]", justify="center")
 
 
-def main() -> None:
+async def main() -> None:
     """Main function to execute the simulation."""
-    superheroes = fetch_all_superheroes()
+    #superheroes = fetch_all_superheroes()
+    superheroes = await async_fetch_random_superheroes(API_KEY,MAX_SUPERHEROES, 10)
     if superheroes:
         selected_heroes = populate_superheroes(superheroes)
         team1_data, team2_data = selected_heroes[:5], selected_heroes[5:]
@@ -138,7 +138,8 @@ def main() -> None:
         print("Failed to fetch superhero data.")
 
 if __name__ == "__main__":
-    main()
+    #main()
+    asyncio.run(main())
 
 
 
