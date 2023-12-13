@@ -42,7 +42,6 @@ def fetch_random_superheroes(api_key:str , max_superheroes:int=733, n=10) -> Opt
     return superheroes
 
 # Async versions since fetch_random_superheroes is doing 10 consecutive http reuqests
-
 async def fetch_hero(session, url):
     async with session.get(url) as response:
         return await response.json()
