@@ -10,6 +10,7 @@ from rich.table import Table
 from rich import print as rprint
 from rich.text import Text
 from rich.live import Live
+from rich.layout import Layout
 
 from dotenv import load_dotenv
 load_dotenv()  # This loads the variables from .env
@@ -20,6 +21,8 @@ API_KEY : Optional[str] = os.getenv('MY_API_KEY')
 MAX_SUPERHEROES = 732
 # Adjust number to adjust max of FB (Filiation Coefficient) and thus variance
 MAX_FB = 9
+# Adjust to set the time spent between actions
+SLEEP_TIME = 0.4
 
 
 console = Console() # Console for TUI
@@ -106,7 +109,7 @@ class Superhero:
         return self.hp > 0
 
     def __str__(self) -> str:
-        return f"{self.name} (HP: {self.hp})"
+        return f"{self.name}    HP: {self.hp}/{self.full_hp})"
 
 # Superhero team class
 class Team:
@@ -142,6 +145,14 @@ class Team:
         if len(self.alive_team) > 0:
             return self.alive_team[0]
         return None
+    
+    def member_idx(self, idx:int)->Text:
+        output = Text("")
+        if idx < self.total_members:
+            members = self.alive_team + self.dead_team
+            hero = members[idx]
+            output = Text(f"{hero.name}    HP:{hero.hp}/{hero.full_hp}", style="green" if hero.hp > 0 else "red strike")
+        return output
 
     def bury_member(self)->None:
         """Move a dead member from alive to dead list"""
@@ -197,18 +208,39 @@ def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]
     return superheroes
 
 
-def display_teams(team1: Team, team2: Team) -> Table:
-    """Display the teams and their members with updates."""
+def make_layout() -> Layout:
+    """Define the layout"""
+    layout = Layout(name="root")
+
+    layout.split(
+        Layout(name="header", size=3),
+        Layout(name="main", ratio=1),
+        Layout(name="footer", size=7),
+    )
+    layout["main"].split_row(
+        Layout(name="side"),
+        Layout(name="body", ratio=2, minimum_size=60),
+    )
+    layout["side"].split(Layout(name="box1"), Layout(name="box2"))
+    return layout
+
+
+def render_table(team1: Team, team2: Team, simulation_actions=[]) -> Table:
+    """Display the teams with their members and actions."""
     table = Table()
 
     table.add_column("Team 1", justify="left")
-    table.add_column("Simulation", justify="center", style="bold yellow")
+    table.add_column("Simulation", justify="center", min_width=80)
     table.add_column("Team 2", justify="right")
+    table_length =  max(len(simulation_actions),5)
 
-    for hero1, hero2 in zip(team1.alive_team + team1.dead_team, team2.alive_team + team2.dead_team):
-        hero1_text = Text(f"{hero1.name}    HP:{hero1.hp}/{hero1.full_hp}", style="green" if hero1.hp > 0 else "red strike")
-        hero2_text = Text(f"HP:{hero2.hp}/{hero2.full_hp}   {hero2.name}", style="green" if hero2.hp > 0 else "red strike")
-        table.add_row(hero1_text, "", hero2_text)
+    for i in range(0, table_length):
+        simulation_text = ""
+        if i < len(simulation_actions):
+            simulation_text = simulation_actions[i]
+        hero1_text = team1.member_idx(i)
+        hero2_text = team2.member_idx(i)
+        table.add_row(hero1_text, simulation_text, hero2_text)
 
     return table
 
@@ -221,9 +253,10 @@ def simulate_fight(team1: Team, team2: Team) -> None:
     t1_fighter = team1.next_member()
     t2_fighter = team2.next_member()
     attack_order = [(team1,team2), (team2,team1)]
+    simulation_actions = []
 
     with Live(console=console, screen=False, auto_refresh=False) as live:
-    
+        live.update(render_table(team1, team2, simulation_actions), refresh=True) # so there's a first update on screen
         # Simulate until one team is fully defeated
         while team1.next_member() and team2.next_member():
             # we randomize who attacks between the current fighters
@@ -235,26 +268,27 @@ def simulate_fight(team1: Team, team2: Team) -> None:
                 # Simple attack calculation: 10% of attacker's power is inflicted as damage
                 attack_type, damage = attacker.random_attack()
                 defender_hp = defender.take_damage(damage)
-                console.print(f"{attacker.name} uses {attack_type} attack!  {defender.name} took {damage} damage. {defender.name} HP: {defender_hp}")
+                action = Text(f"{attacker.name} uses {attack_type} attack!  {defender.name} took {damage} damage. {defender.name} HP: {defender_hp}")
+                simulation_actions.append(action)
                 # if attack killed
                 if defender_hp <= 0:
-                    console.print(f"{defender.name} has died. ",end='')
-                    next_member_str = ""
+                    next_member_str = f"{defender.name} has died. "
                     if random_choice == 0:
                         team2.bury_member()
                         t2_fighter = team2.next_member()
                         defender = t2_fighter
                         if t2_fighter:
-                            next_member_str = f"{t2_fighter.name} steps in!"
+                            next_member_str += f"{t2_fighter.name} steps in!"
                     else:
                         team1.bury_member()
                         t1_fighter = team1.next_member()
                         defender = t1_fighter
                         if t1_fighter:
-                            next_member_str = f"{t1_fighter.name} steps in!"
-                    console.print(next_member_str)     
-                time.sleep(1)
-            live.update(display_teams(team1, team2), refresh=True)
+                            next_member_str += f"{t1_fighter.name} steps in!"
+                    next_member_text = Text(next_member_str, style="blue bold")
+                    simulation_actions.append(next_member_text)    
+                time.sleep(SLEEP_TIME)
+            live.update(render_table(team1, team2, simulation_actions), refresh=True)
 
     # Announce winner
     winner = "Team 1" if any(hero.hp > 0 for hero in team1.alive_team) else "Team 2"
