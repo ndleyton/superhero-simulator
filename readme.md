@@ -2,6 +2,9 @@
 
 Superhero Simulator takes 2 teams of 5 superheroes each and makes them battle with each other.
 
+<img width="1250" alt="Screenshot 2023-12-13 at 2 01 08 PM" src="https://github.com/ndleyton/superhero-simulator/assets/20179825/673f2921-213d-4533-a1bd-c109bc1baaec">
+
+
 To execute run
 ```
 python main.py
