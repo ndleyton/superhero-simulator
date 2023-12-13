@@ -1,6 +1,8 @@
+import requests
 import random
 import asyncio
 import time
+import argparse
 from typing import List, Optional, Tuple
 import os
 from rich.console import Console
@@ -27,7 +29,24 @@ SLEEP_TIME = 0.4
 
 
 console = Console() # Console for TUI
+# Setup argparse for command line arguments
+parser = argparse.ArgumentParser(description="Superhero Fight Simulator")
+parser.add_argument('--email', help="Email address to send results to", default=None)
+args = parser.parse_args()
 
+
+def send_email(recipient, subject, content, html_content=""):
+    """Function to send email using Mailgun"""
+    api_key = os.getenv("MAILGUN_API_KEY")
+    domain = os.getenv("MAILGUN_DOMAIN")
+    return requests.post(
+        f"https://api.mailgun.net/v3/{domain}/messages",
+        auth=("api", api_key),
+        data={"from": f"Superhero Simulator <mailgun@{domain}>",
+              "to": [recipient],
+              "subject": subject,
+              "text": content,
+              "html": html_content})
 
 
 def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]:
@@ -54,7 +73,6 @@ def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]
     return superheroes
 
 
-
 def render_table(team1: Team, team2: Team, simulation_actions=[]) -> Table:
     """Display the teams with their members and actions."""
     table = Table()
@@ -76,7 +94,7 @@ def render_table(team1: Team, team2: Team, simulation_actions=[]) -> Table:
 
 
 # Simulate the fight
-def simulate_fight(team1: Team, team2: Team) -> None:
+def simulate_fight(team1: Team, team2: Team) -> list[str]:
     """Simulate the fight and display updates using rich."""
     console.print("[bold magenta]Battle Begins![/bold magenta]", justify="center")
 
@@ -122,8 +140,12 @@ def simulate_fight(team1: Team, team2: Team) -> None:
 
     # Announce winner
     winner = "Team 1" if any(hero.hp > 0 for hero in team1.alive_team) else "Team 2"
-    console.print(f"[bold green]Winner: {winner}[/bold green]", justify="center")
+    winner_text = f"Winner: {winner}"
+    console.print(winner_text, justify="center", style = 'bold')
 
+    # prepare output for email
+    simulation_actions.append(winner_text)
+    return simulation_actions
 
 async def main() -> None:
     """Main function to execute the simulation."""
@@ -133,7 +155,17 @@ async def main() -> None:
         selected_heroes = populate_superheroes(superheroes)
         team1_data, team2_data = selected_heroes[:5], selected_heroes[5:]
         team1, team2 = Team(team1_data), Team(team2_data)
-        simulate_fight(team1, team2)
+        actions = simulate_fight(team1, team2)
+        # prepare email contents
+        if args.email:
+            email_subject = "Superhero Fight Simulation Results"
+            email_content = "\n".join([str(action) for action in actions])
+            # HTML version with bold winner
+            html_content = "<br>".join([str(action) for action in actions])
+            html_content += f"<br><br><strong>{actions[-1]}</strong>"
+            # # Send email
+            send_email(args.email, email_subject, email_content, html_content)
+            console.print(f"[bold cyan]Results emailed to {args.email}[/bold cyan]")
     else:
         print("Failed to fetch superhero data.")
 
