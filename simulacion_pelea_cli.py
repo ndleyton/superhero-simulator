@@ -1,36 +1,47 @@
 import requests
 import random
 import math
-import typing
 import time
-from dotenv import load_dotenv
+from itertools import zip_longest
+from typing import List, Optional, Tuple
 import os
+from rich.console import Console
+from rich.table import Table
+from rich import print as rprint
+from rich.text import Text
+from rich.live import Live
 
+from dotenv import load_dotenv
 load_dotenv()  # This loads the variables from .env
+
 # To store the API key safely, but you can hardcode the API key here
-API_KEY : int = os.getenv('MY_API_KEY') 
+API_KEY : Optional[str] = os.getenv('MY_API_KEY') 
 # number of possible superheroes in API
 MAX_SUPERHEROES = 732
 # Adjust number to adjust max of FB (Filiation Coefficient) and thus variance
 MAX_FB = 9
 
+
+console = Console() # Console for TUI
+
 # OOP superhero
 class Superhero:
+    """Class representing a Superhero with necessary attributes and methods to fight and keep track of health"""
     def __init__(self, name, intelligence, strength, speed, durability, power, combat, alignment, image=''):
         # set the setting or random dependant attributes
         self.team_alignment = None
         self.fb = None
-        self.actual_stamina = random.randint(0,9)
-        self.fb_random = random.randint(0, MAX_FB)
+        self.actual_stamina : int = random.randint(0,9)
+        self.fb_random : int = random.randint(0, MAX_FB)
         # set the API dependant attributes
-        self.name = name
-        self.intelligence = intelligence
-        self.strength = strength
-        self.speed = speed
-        self.durability = durability
-        self.power = power
-        self.combat = combat
-        self.alignment = alignment
+        self.name : str = name
+        self.intelligence : int = intelligence
+        self.strength: int = strength
+        self.speed : int  = speed
+        self.durability : int = durability
+        self.power : int = power
+        self.combat : int = combat
+        self.alignment : str = alignment
         self.image = image
         self.hp = math.floor((strength * 0.8 + durability * 0.7 + power) / 2 * (1 + self.actual_stamina/ 10)) + 100  # Initial HP
         self.full_hp = self.hp
@@ -42,8 +53,6 @@ class Superhero:
     
     # Recalculate all stats taking into account AS and FB
     def adjust_all_stats(self) -> None:
-        print ("pre adjustment:")
-        print(self.__dict__)
         self.intelligence = self.adjusted_stat(self.intelligence)
         self.strength = self.adjusted_stat(self.strength)
         self.speed = self.adjusted_stat(self.speed)
@@ -51,8 +60,6 @@ class Superhero:
         self.power = self.adjusted_stat(self.power)
         self.combat = self.adjusted_stat(self.combat)
         self.adjust_stat_hp()
-        print("post adjustment:")
-        print(self.__dict__)
     
     def adjust_stat_hp(self) -> None:
         """ Recalculate due to recalculating all stats"""
@@ -70,7 +77,7 @@ class Superhero:
         else:
             self.fb = (1+self.fb_random) ** -1
 
-    def random_attack(self) -> (str, int):
+    def random_attack(self) -> Tuple[str, int]:
         """Choose a random attack and return its damage and type"""
         chosen_index = random.randint(0,2)
         damage = 0
@@ -103,6 +110,7 @@ class Superhero:
 
 # Superhero team class
 class Team:
+    """Class representing a team of Superheroes."""
     def __init__(self, heroes: list[Superhero]= []):
         self.alive_team = heroes
         self.dead_team = []
@@ -130,7 +138,7 @@ class Team:
         for hero in self.alive_team:
             hero.set_team_alignment(self.team_alignment)
 
-    def next_member(self) -> typing.Optional[Superhero]:
+    def next_member(self) -> Optional[Superhero]:
         if len(self.alive_team) > 0:
             return self.alive_team[0]
         return None
@@ -145,7 +153,7 @@ class Team:
         return " | ".join(alive)
 
 # Function to fetch all superhero data from the API
-def fetch_all_superheroes():
+def fetch_all_superheroes() -> Optional[dict]:
     url = "https://akabab.github.io/superhero-api/api/all.json"
     #url = f"https://superheroapi.com/api/{API_KEY}/all.json"
     response = requests.get(url)
@@ -155,7 +163,7 @@ def fetch_all_superheroes():
         return None
     
 # Function to fetch superhero data from the API
-def fetch_random_superheroes(n=10):
+def fetch_random_superheroes(n=10) -> Optional[dict]:
     #url = "https://akabab.github.io/superhero-api/api/all.json"
     numbers = random.sample(range(733), n)
     url = f"https://superheroapi.com/api/{API_KEY}/all.json"
@@ -166,8 +174,8 @@ def fetch_random_superheroes(n=10):
     else:
         return None
     
-# Use the fetched superheroes to choose the needed ones and create classes for each
 def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]:
+    """Populates superheroes from the given data."""
     # Convert the dictionary values to a list
     heroes_list = list(heroes_data)
     random_heroes = random.sample(heroes_list, n)
@@ -189,65 +197,83 @@ def populate_superheroes(heroes_data: dict = {}, n:int = 10,) -> list[Superhero]
     return superheroes
 
 
-# Simulate the fight
-def simulate_fight(team1: Team, team2: Team):
+def display_teams(team1: Team, team2: Team) -> Table:
+    """Display the teams and their members with updates."""
+    table = Table()
 
-    print("Battle Begins!")
-    print("Team 1:",team1)
-    print("Team 2:",team2)
+    table.add_column("Team 1", justify="left")
+    table.add_column("Simulation", justify="center", style="bold yellow")
+    table.add_column("Team 2", justify="right")
+
+    for hero1, hero2 in zip(team1.alive_team + team1.dead_team, team2.alive_team + team2.dead_team):
+        hero1_text = Text(f"{hero1.name}    HP:{hero1.hp}/{hero1.full_hp}", style="green" if hero1.hp > 0 else "red strike")
+        hero2_text = Text(f"HP:{hero2.hp}/{hero2.full_hp}   {hero2.name}", style="green" if hero2.hp > 0 else "red strike")
+        table.add_row(hero1_text, "", hero2_text)
+
+    return table
+
+
+# Simulate the fight
+def simulate_fight(team1: Team, team2: Team) -> None:
+    """Simulate the fight and display updates using rich."""
+    console.print("[bold magenta]Battle Begins![/bold magenta]", justify="center")
 
     t1_fighter = team1.next_member()
     t2_fighter = team2.next_member()
     attack_order = [(team1,team2), (team2,team1)]
 
-    # Simulate until one team is fully defeated
-    while team1.next_member() and team2.next_member():
-        # we randomize who attacks between the current fighters
-        random_choice = random.randint(0,1)
-        attacker_team, defender_team = attack_order[random_choice]
-        attacker,defender = attacker_team.next_member(), defender_team.next_member()
-        # attack only if both are alive
-        if attacker.hp > 0 and defender.hp > 0:
-            # Simple attack calculation: 10% of attacker's power is inflicted as damage
-            attack_type, damage = attacker.random_attack()
-            defender_hp = defender.take_damage(damage)
-            print(f"{attacker.name} uses {attack_type} attack!  {defender.name} took {damage} damage. {defender.name} HP: {defender_hp}")
-            # if attack killed
-            if defender_hp <= 0:
-                print(f"{defender.name} has died. ",end='')
-                next_member_str = ""
-                if random_choice == 0:
-                    team2.bury_member()
-                    t2_fighter = team2.next_member()
-                    defender = t2_fighter
-                    if t2_fighter:
-                        next_member_str = f"{t2_fighter.name} steps in!"
-                else:
-                    team1.bury_member()
-                    t1_fighter = team1.next_member()
-                    defender = t1_fighter
-                    if t1_fighter:
-                        next_member_str = f"{t1_fighter.name} steps in!"
-                print(next_member_str)     
-            time.sleep(1)
+    with Live(console=console, screen=False, auto_refresh=False) as live:
+    
+        # Simulate until one team is fully defeated
+        while team1.next_member() and team2.next_member():
+            # we randomize who attacks between the current fighters
+            random_choice = random.randint(0,1)
+            attacker_team, defender_team = attack_order[random_choice]
+            attacker,defender = attacker_team.next_member(), defender_team.next_member()
+            # attack only if both are alive
+            if attacker.hp > 0 and defender.hp > 0:
+                # Simple attack calculation: 10% of attacker's power is inflicted as damage
+                attack_type, damage = attacker.random_attack()
+                defender_hp = defender.take_damage(damage)
+                console.print(f"{attacker.name} uses {attack_type} attack!  {defender.name} took {damage} damage. {defender.name} HP: {defender_hp}")
+                # if attack killed
+                if defender_hp <= 0:
+                    console.print(f"{defender.name} has died. ",end='')
+                    next_member_str = ""
+                    if random_choice == 0:
+                        team2.bury_member()
+                        t2_fighter = team2.next_member()
+                        defender = t2_fighter
+                        if t2_fighter:
+                            next_member_str = f"{t2_fighter.name} steps in!"
+                    else:
+                        team1.bury_member()
+                        t1_fighter = team1.next_member()
+                        defender = t1_fighter
+                        if t1_fighter:
+                            next_member_str = f"{t1_fighter.name} steps in!"
+                    console.print(next_member_str)     
+                time.sleep(1)
+            live.update(display_teams(team1, team2), refresh=True)
 
-    # Determine the winning team
+    # Announce winner
     winner = "Team 1" if any(hero.hp > 0 for hero in team1.alive_team) else "Team 2"
-    print("\nWinner:", winner)
+    console.print(f"[bold green]Winner: {winner}[/bold green]", justify="center")
 
-# Fetch superheroes
-superheroes = fetch_all_superheroes()
-if superheroes:
-    # Select 10 random superheroes and divide them into two teams
-    selected_heroes = populate_superheroes(superheroes)
-    team1_data, team2_data = selected_heroes[:5], selected_heroes[5:]
-    # set up the team alignments
-    team1, team2= Team(team1_data) ,Team(team2_data)
 
-    # Simulate the fight
-    simulate_fight(team1, team2)
-else:
-    print("Failed to fetch superhero data.")
+def main() -> None:
+    """Main function to execute the simulation."""
+    superheroes = fetch_all_superheroes()
+    if superheroes:
+        selected_heroes = populate_superheroes(superheroes)
+        team1_data, team2_data = selected_heroes[:5], selected_heroes[5:]
+        team1, team2 = Team(team1_data), Team(team2_data)
+        simulate_fight(team1, team2)
+    else:
+        print("Failed to fetch superhero data.")
+
+if __name__ == "__main__":
+    main()
 
 
 
