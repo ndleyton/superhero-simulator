@@ -229,7 +229,7 @@ def render_table(team1: Team, team2: Team, simulation_actions=[]) -> Table:
     """Display the teams with their members and actions."""
     table = Table()
 
-    table.add_column("Team 1", justify="left")
+    table.add_column("Team 1", justify="right")
     table.add_column("Simulation", justify="center", min_width=80)
     table.add_column("Team 2", justify="right")
     table_length =  max(len(simulation_actions),5)
