@@ -40,7 +40,7 @@ MAILGUN_DOMAIN=<your mailgun domain>
 
 
 ## Assumptions
-
+- Interface is done in CLI, since `¨El avance y el resultado de las batallas se debe imprimir en la consola.¨`
 - Damage is done as an int
 - Each Superhero has one (AS) Actual Stamina and one random element of FB chosen that's static
 - To make it so one team does not always have an advantage, the superhero attacking between Team 1 and Team 2 is randomized
